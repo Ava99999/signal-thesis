@@ -1,0 +1,53 @@
+#p           = 4
+#q           = 6
+#G_smooth    = lambda z : fit_sigmoid(z,p,q)
+
+# test sigmoid fitting (for p, q = 4,6)
+v = np.array([0.5-1j, 3+2j, -2+4j, 3+4j, -6+3j, 7-3j], dtype=complex) # ordered increasing absolute value
+vreal = np.array([-6 + 3j, -2 + 4j, 0.5-1j, 3+2j, 3+4j, 7-3j], dtype=complex) # ordered increasing real part
+vimag = np.array([7 - 3j, 0.5-1j, 3+2j, -6 + 3j, -2+4j, 3+4j], dtype=complex) # ordered increasing imag part
+print(np.abs(v))
+
+G_max = lambda x : np.clip(np.abs(x),p,q)*(x / np.abs(x))
+
+# absolute value increasing
+# Gmax = G_max(v)
+# vc = np.vstack((np.real(v), np.imag(v)))
+# Gsmooth = G_smooth(v)
+
+# plt.figure()
+# plt.plot(np.abs(v), np.abs(Gmax), label = 'coarse G')
+# plt.plot(np.abs(v), np.abs(Gsmooth), label = 'sigmoid optimized fit G')
+# plt.title('Fit sigmoid to threshold function for absolute value')
+# plt.legend()
+# plt.show()
+
+# real part increasing
+Gmax = G_max(vreal)
+vcreal = np.vstack((np.real(vreal), np.imag(vreal)))
+
+sigmoid_real = real_sigmoid(vcreal, 2, 5, 2.1, 4)
+Gsmooth = G_smooth(vreal)
+k = len(Gsmooth)//2
+print(len(Gsmooth))
+print(k)
+
+plt.figure()
+plt.plot(np.real(vreal), np.real(Gmax), label = 'coarse G')
+plt.plot(np.real(vreal), sigmoid_real, label = 'naive parameter fit sigmoid')
+plt.plot(np.real(vreal), Gsmooth[:k], label = 'sigmoid optimized fit G')
+plt.title('Fit sigmoid to threshold function for real parts')
+plt.legend()
+plt.show()
+
+# imaginary part increasing
+Gmax = G_max(vimag)
+vcimag = np.vstack((np.real(vimag), np.imag(vimag)))
+Gsmooth = G_smooth(vimag)
+
+plt.figure()
+plt.plot(np.imag(vimag), np.imag(Gmax), label = 'coarse G')
+plt.plot(np.imag(vimag), Gsmooth[k:], label = 'sigmoid optimized fit G')
+plt.title('Fit sigmoid to threshold function for imaginary parts')
+plt.legend()
+plt.show()
