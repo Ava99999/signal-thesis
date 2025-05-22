@@ -39,10 +39,7 @@ def modrelu(z, b = -1.):
     denom = tf.where(abs_z > 0, abs_z, tf.ones_like(abs_z))  # avoid 0 division
     scale = tf.where(abs_z > 0, relu / denom, tf.zeros_like(abs_z))
     return tf.cast(scale, z.dtype) * z
-    #return tf.cast(tf.keras.activations.relu(abs_z + b), dtype=z.dtype) * z / tf.cast(abs_z + c, dtype=z.dtype)
-
     
-
 #MSE loss function (single sample)
 def loss_MSE(a,x):
     '''
@@ -68,10 +65,20 @@ def dLossdaL(a, x):
     '''
     return tf.math.conj(a - x), a - x
 
-def Jac_modrelu(z, b = -1., c = 1e-3):
+def Jac_modrelu(z, b = -1.): # todo maybe research sparse implementation, these are possibly going to be large
     '''
-    Jacobian of the modrelu function
+    Jacobian of the modrelu function with radius b. 
+    
+    Input:
+        z:      Tensor complex64 array
+        b:      float, 'dead zone' parameter, assumed to be negative
     '''
+    abs_z     = tf.cast(tf.math.abs(z), z.dtype) # has to remain complex64 for operations
+    dev_z     = tf.where(tf.math.abs(z) + b >= 0, tf.ones_like(z) + tf.cast((b/2)/abs_z, z.dtype), tf.zeros_like(z)) 
+    dev_zstar = tf.where(tf.math.abs(z) + b >= 0, tf.cast((-b*z**2)/(2*abs_z**3), z.dtype), tf.zeros_like(z))
+    J_z       = tf.linalg.diag(dev_z)
+    J_zstar   = tf.linalg.diag(dev_zstar)
+    return J_z, J_zstar
 
 
 
