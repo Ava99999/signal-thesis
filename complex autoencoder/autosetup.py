@@ -30,7 +30,7 @@ def arctan_complex(z):
     return 0.5*i*(tf.math.log(1 - i*z) - tf.math.log(1 + i*z))
 
 # modReLU activation function
-def modrelu(z, b = -1.):
+def modrelu(z, b = -0.25):
     """
     Implements modReLU(z) = ReLU(|z| + b) * z/(|z|)
     """
@@ -65,7 +65,7 @@ def dLossdaL(a, x):
     '''
     return tf.math.conj(a - x), a - x
 
-def Jac_modrelu(z, b = -1.): # todo maybe research sparse implementation, these are possibly going to be large
+def Jac_modrelu(z, b = -0.25): # todo maybe research sparse implementation, these are possibly going to be large
     '''
     Jacobian of the modrelu function with radius b. 
     
@@ -80,12 +80,118 @@ def Jac_modrelu(z, b = -1.): # todo maybe research sparse implementation, these 
     J_zstar   = tf.linalg.diag(dev_zstar)
     return J_z, J_zstar
 
+'''Defining custom complex layer object with widely linear transform and custom encoder and decoder'''
 
+@register_keras_serializable()
+class ComplexDense(layers.Layer):
+    '''Defines a single layer of the widely linear transform with activation function'''
+    def __init__(self, output_dim, activation = modrelu,  name="encoder", **kwargs): 
+        super().__init__(name=name, **kwargs)
+        self.output_dim = output_dim
+        self.activation = activation
+
+    # create state of the layer (weight matrices, bias vector)
+    def build(self, input_shape):
+        self.W1 = self.add_weight(
+            shape=(input_shape[-1], self.output_dim),
+            initializer=glorot_complex, 
+            trainable=True,
+            name="W1",
+            dtype=tf.complex64,
+        )
+        self.W2 = self.add_weight(
+            shape=(input_shape[-1], self.output_dim),
+            initializer=glorot_complex,
+            trainable=True,
+            name="W2",
+            dtype=tf.complex64,
+        )
+        self.bias = self.add_weight(
+            shape=(self.output_dim,),
+            initializer="zeros", # maybe should check if that works as complex zeros?
+            trainable=True,
+            name="bias",
+            dtype=tf.complex64,
+        )
+
+    # helper function computation, useful to do intermediate steps of the forward pass
+    def wd_transform(self, inputs):
+        # assumes inputs is tf.complex dtype
+        inputs = tf.cast(inputs, tf.complex64)
+        tf.debugging.assert_type(inputs, tf.complex64) # for debugging
+        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
+    
+    # defines the computation
+    def call(self, inputs): 
+        z = self.wd_transform(inputs)
+        return self.activation(z)
+    
 
 @register_keras_serializable()
 class ComplexEncoder(layers.Layer):
-    ''' Maps MNIST digits to compressed input in latent dimension  '''
-    def __init__(self, latent_dim, activation = arctan_complex,  name="encoder", **kwargs): 
+    ''' 
+    Maps MNIST digits to compressed input in latent dimension  
+    Input/some parameters:
+        layer_dims:        int array, e.g. [128, 64, latent_dim]. Does not include input dimension. 
+        input_shape:        automatically passed through build, size of original data in the form (batch_size, data_dim)
+    
+    '''
+    def __init__(self, layer_dims, activation=modrelu, name="encoder", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.layer_dims = layer_dims 
+        self.activation = activation
+        self.layers_list = []
+
+    def build(self, input_shape):
+        dims = [input_shape[-1]] + self.layer_dims # now including the input layer dimension, e.g. [784, 128, 64, latent_dim]
+        self.layers_list = [
+            ComplexDense(output_dim=dims[i+1], activation=self.activation)
+            for i in range(len(self.layer_dims))
+        ]
+        for layer in self.layers_list:
+            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]])) # basically dims[i]: input shape
+
+    def call(self, inputs): # inputs is the data so shape (batch_size, 784)
+        x = tf.cast(inputs, tf.complex64)
+        for layer in self.layers_list:
+            x = layer(x) # this puts x through the layers to the latent dimension
+        return x
+
+@register_keras_serializable()
+class ComplexDecoder(layers.Layer): 
+    ''' 
+    Maps input from latent dimension to reconstructed digit 
+    Some parameters:
+        layer_dims:     int array, e.g. [64, 128, original_dim]. Does not include latent dimension (or input)
+    
+    '''
+    def __init__(self, layer_dims, activation=modrelu, name="decoder", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.layer_dims = layer_dims 
+        self.activation = activation
+        self.layers_list = []
+
+    def build(self, input_shape):
+        dims = [input_shape[-1]] + self.layer_dims # now including the latent layer dimension, e.g. [latent_dim, 64, 128, original_dim]
+        self.layers_list = [
+            ComplexDense(output_dim=dims[i+1], activation=self.activation)
+            for i in range(len(self.layer_dims))
+        ]
+        for layer in self.layers_list:
+            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]])) # basically dims[i]: input shape
+
+    def call(self, inputs): # inputs is the data so shape (batch_size, 784)
+        x = tf.cast(inputs, tf.complex64)
+        for layer in self.layers_list:
+            x = layer(x) # this puts x through the layers to the latent dimension
+        return x
+
+
+''' old version: save just in case for a bit
+@register_keras_serializable()
+class ComplexEncoder(layers.Layer):
+    #Maps MNIST digits to compressed input in latent dimension 
+    def __init__(self, latent_dim, activation = modrelu,  name="encoder", **kwargs): 
         super().__init__(name=name, **kwargs)
         self.latent_dim = latent_dim
         self.activation = activation
@@ -113,19 +219,25 @@ class ComplexEncoder(layers.Layer):
             name="bias",
             dtype=tf.complex64,
         )
-    
-    # defines the computation
-    def call(self, inputs): 
+
+    # helper function computation, useful to do intermediate steps of the forward pass
+    def wd_transform(self, inputs):
         # assumes inputs is tf.complex dtype
         inputs = tf.cast(inputs, tf.complex64)
         tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        z = tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
-        return self.activation(z)
+        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
     
+    # defines the computation
+    def call(self, inputs): 
+        z = self.wd_transform(self, inputs)
+        return self.activation(z)
+
+
+
 @register_keras_serializable()
 class ComplexDencoder(layers.Layer):
-    ''' Maps input from latent dimension to reconstructed digit  '''
-    def __init__(self, original_dim, activation = arctan_complex, name="decoder", **kwargs): 
+    # Maps input from latent dimension to reconstructed digit  
+    def __init__(self, original_dim, activation = modrelu, name="decoder", **kwargs): 
         super().__init__(name=name, **kwargs)
         self.original_dim = original_dim
         self.activation = activation
@@ -153,11 +265,16 @@ class ComplexDencoder(layers.Layer):
             name="bias",
             dtype=tf.complex64,
         )
+
+    # helper function computation, useful to do intermediate steps of the forward pass
+    def wd_transform(self, inputs):
+        # assumes inputs is tf.complex dtype
+        inputs = tf.cast(inputs, tf.complex64)
+        tf.debugging.assert_type(inputs, tf.complex64) # for debugging
+        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
     
     # defines the computation
     def call(self, inputs): 
-        # assumes inputs is tf.complex64 dtype
-        inputs = tf.cast(inputs, tf.complex64)
-        tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        z = tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
+        z = self.wd_transform(self, inputs)
         return self.activation(z)
+'''
