@@ -18,15 +18,15 @@ from scipy.fft import fft, ifft, fft2, ifft2
 from scipy.optimize import minimize
 
 '''Contains the backpropagation algorithm and gradient logic'''
-# TODO many things are made for a single sample and not for batch logic!
+# TODO many things are made for a single sample and not for batch logic! especially things like compute_grad, where we use an outer product
 
 ''' Helper functions that are repeated in CBP '''
 def compute_grad_W1(a_prev, dR_dq_star): 
-    a_prev_star = tf.conj(a_prev)
-    return tf.einsum('i,j->ij', dR_dq_star, a_prev_star) #(uv^T) output[i,j] = u[i]*v[j]
+    a_prev_star = tf.math.conj(a_prev)
+    return tf.einsum('i,j->ij', tf.squeeze(dR_dq_star), tf.squeeze(a_prev_star)) #(uv^T) output[i,j] = u[i]*v[j]
 
 def compute_grad_W2(a_prev, dR_dq_star):
-    return tf.einsum('i,j->ij', dR_dq_star, a_prev)
+    return tf.einsum('i,j->ij', tf.squeeze(dR_dq_star), tf.squeeze(a_prev)) #tf.squeeze removes the dimensions of length 1
 
 #@tf.function # add at the end once stable; check/avoid numpy operations
 def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act): 
@@ -67,7 +67,14 @@ def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act):
 
     # TODO maybe compute the value of the loss function? or do that in model or something? maybe not necessary here
 
-    # TODO test if last element of a_list is equal to y
+    # test if last element of a_list is equal to y
+    print(y.shape)
+    print(a_list[-1].shape)
+    tf.debugging.assert_equal(y, a_list[-1], message="a^L does not match y")
+
+    # optional: softer checks
+    # tf.debugging.assert_near(y, a_list[-1], atol=1e-5, message="a^L ≠ y")
+    # print("y - a^L:", tf.reduce_max(tf.abs(y - a_list[-1])))
 
     ### BACKWARD PASS ###
     # NOTE: the order of this list is l = L, L-1, ..., 1 of the layers from decoder to encoder
@@ -80,18 +87,30 @@ def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act):
     dR_dqL                = dR_daL @ daL_dqL        + dR_daL_star @ tf.math.conj(daL_dqL_star) # R-derivative
     dR_dqL_star           = dR_daL @ daL_dqL_star   + dR_daL_star @ tf.math.conj(daL_dqL) # R*-derivative
 
+    print("dR_daL", dR_daL.shape)
+    print("da_L_dqL_star", daL_dqL_star.shape)
+    print("dR_daL_star", dR_daL_star.shape)
+    print("daL_dqL*", tf.math.conj(daL_dqL).shape)
+
+
     dR_dq_list.append(dR_dqL)
     dR_dqstar_list.append(dR_dqL_star)
 
     # compute gradients final layer
     grad_W1_L = compute_grad_W1(a_list[-2], dR_dqL_star) # a[L-1]* x dR/dqL*
     grad_W2_L = compute_grad_W2(a_list[-2], dR_dqL_star) # a[L-1]  x dR/dqL*
-    grad_b_L  = dR_dqL_star 
+    grad_b_L  = tf.squeeze(dR_dqL_star) # remove dimensions of size 1
     layer_L   = decoder.layers_list[-1]
 
-    grads.append((grad_W1_L, layer_L.W1))
-    grads.append((grad_W2_L, layer_L.W2))
-    grads.append((grad_W2_L, layer_L.bias))
+    print("grad_W1", grad_W1_L.shape)
+    print("layer_L W1 shape", layer_L.W1.shape)
+
+    print("grad_b", grad_b_L.shape)
+    print("layer_L b shape", layer_L.bias.shape)
+
+    grads.append((tf.transpose(grad_W1_L), layer_L.W1))
+    grads.append((tf.transpose(grad_W2_L), layer_L.W2))
+    grads.append((tf.transpose(grad_b_L), layer_L.bias))
 
     # TODO now recursively
 
