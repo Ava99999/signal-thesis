@@ -119,7 +119,7 @@ class ComplexDense(layers.Layer):
         # assumes inputs is tf.complex dtype
         inputs = tf.cast(inputs, tf.complex64)
         tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
+        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias #! left multiplication is std!
     
     # defines the computation
     def call(self, inputs): 
@@ -185,96 +185,3 @@ class ComplexDecoder(layers.Layer):
         for layer in self.layers_list:
             x = layer(x) # this puts x through the layers to the latent dimension
         return x
-
-
-''' old version: save just in case for a bit
-@register_keras_serializable()
-class ComplexEncoder(layers.Layer):
-    #Maps MNIST digits to compressed input in latent dimension 
-    def __init__(self, latent_dim, activation = modrelu,  name="encoder", **kwargs): 
-        super().__init__(name=name, **kwargs)
-        self.latent_dim = latent_dim
-        self.activation = activation
-    
-    # create state of the layer (weight matrices, bias vector)
-    def build(self, input_shape):
-        self.W1 = self.add_weight(
-            shape=(input_shape[-1], self.latent_dim),
-            initializer=glorot_complex, 
-            trainable=True,
-            name="W1",
-            dtype=tf.complex64,
-        )
-        self.W2 = self.add_weight(
-            shape=(input_shape[-1], self.latent_dim),
-            initializer=glorot_complex,
-            trainable=True,
-            name="W2",
-            dtype=tf.complex64,
-        )
-        self.bias = self.add_weight(
-            shape=(self.latent_dim,),
-            initializer="zeros", # maybe should check if that works as complex zeros?
-            trainable=True,
-            name="bias",
-            dtype=tf.complex64,
-        )
-
-    # helper function computation, useful to do intermediate steps of the forward pass
-    def wd_transform(self, inputs):
-        # assumes inputs is tf.complex dtype
-        inputs = tf.cast(inputs, tf.complex64)
-        tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
-    
-    # defines the computation
-    def call(self, inputs): 
-        z = self.wd_transform(self, inputs)
-        return self.activation(z)
-
-
-
-@register_keras_serializable()
-class ComplexDencoder(layers.Layer):
-    # Maps input from latent dimension to reconstructed digit  
-    def __init__(self, original_dim, activation = modrelu, name="decoder", **kwargs): 
-        super().__init__(name=name, **kwargs)
-        self.original_dim = original_dim
-        self.activation = activation
-
-    # create state of the layer (weight matrices, bias vector)
-    def build(self, input_shape):
-        self.W1 = self.add_weight(
-            shape=(input_shape[-1], self.original_dim),
-            initializer=glorot_complex, # default option: can also do random_normal, no idea what would be good
-            trainable=True,
-            name="W1",
-            dtype=tf.complex64,
-        )
-        self.W2 = self.add_weight(
-            shape=(input_shape[-1], self.original_dim),
-            initializer=glorot_complex, # default option: can also do random_normal, no idea what would be good
-            trainable=True,
-            name="W2",
-            dtype=tf.complex64,
-        )
-        self.bias = self.add_weight(
-            shape=(self.original_dim,),
-            initializer="zeros",
-            trainable=True,
-            name="bias",
-            dtype=tf.complex64,
-        )
-
-    # helper function computation, useful to do intermediate steps of the forward pass
-    def wd_transform(self, inputs):
-        # assumes inputs is tf.complex dtype
-        inputs = tf.cast(inputs, tf.complex64)
-        tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias
-    
-    # defines the computation
-    def call(self, inputs): 
-        z = self.wd_transform(self, inputs)
-        return self.activation(z)
-'''

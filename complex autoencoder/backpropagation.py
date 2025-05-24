@@ -31,8 +31,7 @@ def compute_grad_W2(a_prev, dR_dq_star):
 #@tf.function # add at the end once stable; check/avoid numpy operations
 def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act): 
     '''
-    we are going to write complex backpropagation in a stupid way as if it was an ordinary function and see what we need, 
-    and then later maybe break it up into more sophisticated pieces
+    Complex backpropagation algorithm for the widely linear transform.
 
     Input:
         x:          Tensor complex64, specific training sample (might change to a batch of samples later)
@@ -48,22 +47,19 @@ def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act):
     '''
     ### FORWARD PASS ###
     # NOTE: the order of this list is l = 1, 2, ..., L of the layers from encoder to decoder
+    # NOTE: q_list contains q1, q2, ..., qL, a_list contains a0, ..., aL
     a = x # first activation: a0
     q_list, a_list = [], []
+    a_list.append(x) 
 
-    # record activations encoder
-    for layer in encoder.layers_list:
+    # record activations encoder & decoder
+    full_layers = encoder.layers_list + decoder.layers_list
+    L = len(full_layers)
+    for layer in full_layers:
         q = layer.wd_transform(a)
         a = layer.activation(q)
         q_list.append(q)
         a_list.append(a)
-    
-    # record activations decoder
-    for layer in decoder.layers_list:
-        q = layer.wd_transform(a)
-        a = layer.activation(q)
-        q_list.append(q)
-        a_list.append(a) 
 
     # TODO maybe compute the value of the loss function? or do that in model or something? maybe not necessary here
 
@@ -88,30 +84,59 @@ def CBP(x, y, encoder, decoder, loss_fn, dev_loss, jac_act):
     dR_dqL_star           = dR_daL @ daL_dqL_star   + dR_daL_star @ tf.math.conj(daL_dqL) # R*-derivative
 
     print("dR_daL", dR_daL.shape)
-    print("da_L_dqL_star", daL_dqL_star.shape)
-    print("dR_daL_star", dR_daL_star.shape)
-    print("daL_dqL*", tf.math.conj(daL_dqL).shape)
+    print("daL_dqL", daL_dqL.shape)
+
+    print("dR_dqL", dR_dqL.shape)
+    print("dR_dqL_star", dR_dqL_star.shape)
 
 
     dR_dq_list.append(dR_dqL)
     dR_dqstar_list.append(dR_dqL_star)
 
+    print("dR_dqL from list and [-1]", (dR_dq_list[0])[-1].shape)
+
     # compute gradients final layer
-    grad_W1_L = compute_grad_W1(a_list[-2], dR_dqL_star) # a[L-1]* x dR/dqL*
-    grad_W2_L = compute_grad_W2(a_list[-2], dR_dqL_star) # a[L-1]  x dR/dqL*
+    grad_W1_L = compute_grad_W1(a_list[L-1], dR_dqL_star) # a[L-1]* x dR/dqL*
+    grad_W2_L = compute_grad_W2(a_list[L-1], dR_dqL_star) # a[L-1]  x dR/dqL*
     grad_b_L  = tf.squeeze(dR_dqL_star) # remove dimensions of size 1
-    layer_L   = decoder.layers_list[-1]
-
-    print("grad_W1", grad_W1_L.shape)
-    print("layer_L W1 shape", layer_L.W1.shape)
-
-    print("grad_b", grad_b_L.shape)
-    print("layer_L b shape", layer_L.bias.shape)
+    layer_L   = full_layers[-1]
 
     grads.append((tf.transpose(grad_W1_L), layer_L.W1))
     grads.append((tf.transpose(grad_W2_L), layer_L.W2))
     grads.append((tf.transpose(grad_b_L), layer_L.bias))
 
-    # TODO now recursively
+    # recursive compute gradients layers L-1, ..., 1
+    for l in reversed(range(1, L)):
+        print("layer number l = ", l)
+        layer_l                         = full_layers[l]
+        layer_lprev                     = full_layers[l-1] 
+        dal_dql_prev, dal_dql_prev_star = jac_act(q_list[l-1]) # da[l-1]/dq[l-1]
+        dql_dal_prev                    = tf.transpose(layer_l.W1) # dq[l]/da[l-1]
+        dql_dal_prev_star               = tf.transpose(layer_l.W2)
+
+        # compute dR/dq[l-1] and dR/dq[l-1]*
+        beta  = dql_dal_prev @ dal_dql_prev      + dql_dal_prev_star @ tf.math.conj(dal_dql_prev_star) # R-derivative
+        gamma = dql_dal_prev @ dal_dql_prev_star + dql_dal_prev_star @ tf.math.conj(dal_dql_prev) # R*-derivative
+
+        print("beta", beta.shape)
+        print("gamma", gamma.shape)
+
+        dR_dql_prev      = (dR_dq_list[L-(l+1)])[-1] @ beta  + (dR_dqstar_list[L-(l+1)])[-1] @ tf.math.conj(gamma) # R-derivative
+        dR_dql_prev_star = (dR_dq_list[L-(l+1)])[-1] @ gamma + (dR_dqstar_list[L-(l+1)])[-1] @ tf.math.conj(beta) # R*-derivative
+
+        print("dR_dql_prev", dR_dql_prev.shape)
+        print("dR_dql_prev_star", dR_dql_prev_star.shape)
+
+        dR_dq_list.append(dR_dql_prev)
+        dR_dqstar_list.append(dR_dql_prev_star)
+
+        # compute gradients wrt W1[l-1], W2[l-1], b[l-1]
+        grad_W1_lprev = compute_grad_W1(a_list[l-1], dR_dql_prev_star) # a[l-1]* \cdot dR/dq[l-1]*
+        grad_W2_lprev = compute_grad_W2(a_list[l-1], dR_dql_prev_star) # a[l-1]  \cdot dR/dq[l-1]*
+        grad_b_lprev  = tf.squeeze(dR_dql_prev_star) # remove dimensions of size 1
+
+        grads.append((tf.transpose(grad_W1_lprev), layer_lprev.W1))
+        grads.append((tf.transpose(grad_W2_lprev), layer_lprev.W2))
+        grads.append((tf.transpose(grad_b_lprev), layer_lprev.bias))
 
     return grads
