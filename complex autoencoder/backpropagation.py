@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import autosetup
-
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import layers, losses
@@ -60,11 +58,7 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
         q_list.append(q)
         a_list.append(a)
 
-    # TODO maybe compute the value of the loss function? or do that in model or something? maybe not necessary here
-
     # test if last element of a_list is equal to y
-    print(y.shape)
-    print(a_list[-1].shape)
     tf.debugging.assert_equal(y, a_list[-1], message="a^L does not match y")
 
     # optional: softer checks
@@ -85,8 +79,6 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
     dR_dq_list.append(dR_dqL)
     dR_dqstar_list.append(dR_dqL_star)
 
-    print("dR_dqL from list and [-1]", (dR_dq_list[0])[-1].shape)
-
     # compute gradients final layer
     grad_W1_L = compute_grad_W1(a_list[L-1], dR_dqL_star) # a[L-1]* x dR/dqL*
     grad_W2_L = compute_grad_W2(a_list[L-1], dR_dqL_star) # a[L-1]  x dR/dqL*
@@ -97,11 +89,8 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
     grads.append((tf.transpose(grad_W2_L), layer_L.W2))
     grads.append((tf.transpose(grad_b_L), layer_L.bias))
 
-    print("Layer L", layer_L.W1.name, type(layer_L.W1), hasattr(layer_L.W1, "assign_sub"))
-
     # recursive compute gradients layers L-1, ..., 1
     for l in reversed(range(1, L)):
-        print("layer number l = ", l)
         layer_l                         = full_layers[l]
         layer_lprev                     = full_layers[l-1] 
         dal_dql_prev, dal_dql_prev_star = jac_act(q_list[l-1]) # da[l-1]/dq[l-1]
@@ -122,8 +111,6 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
         grad_W1_lprev = compute_grad_W1(a_list[l-1], dR_dql_prev_star) # a[l-1]* \cdot dR/dq[l-1]*
         grad_W2_lprev = compute_grad_W2(a_list[l-1], dR_dql_prev_star) # a[l-1]  \cdot dR/dq[l-1]*
         grad_b_lprev  = tf.squeeze(dR_dql_prev_star) # remove dimensions of size 1
-
-        print(layer_lprev.W1.name, type(layer_lprev.W1), hasattr(layer_lprev.W1, "assign_sub"))
 
         grads.append((tf.transpose(grad_W1_lprev), layer_lprev.W1))
         grads.append((tf.transpose(grad_W2_lprev), layer_lprev.W2))
