@@ -36,6 +36,7 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
         y:          Tensor complex64, result of forward pass, final output. Should equal aL
         encoder:    Keras layer object (function), contains weights and forward pass operations
         decoder:    Keras layer object (function), "
+        loss_fn:    todo
         dev_loss:   Derivatives of the loss function, should return two arguments
         jac_act:    Jacobian function of the activation function (C -> C)
 
@@ -69,6 +70,7 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
     # NOTE: the order of this list is l = L, L-1, ..., 1 of the layers from decoder to encoder
     dR_dq_list, dR_dqstar_list  = [], [] # record derivatives of the loss function up to pre-activation q^l, both R- and R*-derivative
     grads = [] # save gradients of all parameters in the format [(grad_W1[1], layer[1].W1), ..., (grad_b[L], layer[L].b)]
+    steps_est = [] # normalized estimates of stepsizes 
 
     # Wirtinger derivatives final layer
     dR_daL, dR_daL_star   = dev_loss(y,x) # derivatives of loss function wrt final layer output
@@ -115,5 +117,7 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
         grads.append((tf.transpose(grad_W1_lprev), layer_lprev.W1))
         grads.append((tf.transpose(grad_W2_lprev), layer_lprev.W2))
         grads.append((tf.transpose(grad_b_lprev), layer_lprev.bias))
+
+    
 
     return grads
