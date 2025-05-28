@@ -18,6 +18,8 @@ from scipy.optimize import minimize
 '''Contains the classes and initialisatinons of the autoencoder model'''
 
 ''' Initializers, loss- and activation functions '''
+tf.keras.saving.get_custom_objects().clear() # remove previously registered objects
+
 # complex initianalizer
 def glorot_complex(shape, dtype=tf.complex64):
     real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
@@ -30,6 +32,7 @@ def arctan_complex(z):
     return 0.5*i*(tf.math.log(1 - i*z) - tf.math.log(1 + i*z))
 
 # modReLU activation function
+#@register_keras_serializable
 def modrelu(z, b = -0.25):
     """
     Implements modReLU(z) = ReLU(|z| + b) * z/(|z|)
@@ -39,6 +42,8 @@ def modrelu(z, b = -0.25):
     denom = tf.where(abs_z > 0, abs_z, tf.ones_like(abs_z))  # avoid 0 division
     scale = tf.where(abs_z > 0, relu / denom, tf.zeros_like(abs_z))
     return tf.cast(scale, z.dtype) * z
+
+# or....     return tf.maximum(tf.abs(z) + b, 0) * tf.math.exp(1j * tf.math.angle(z))???
     
 #MSE loss function (single sample)
 def loss_MSE(a,x):
@@ -82,7 +87,7 @@ def Jac_modrelu(z, b = -0.25): # todo maybe research sparse implementation, thes
 
 '''Defining custom complex layer object with widely linear transform and custom encoder and decoder'''
 
-@register_keras_serializable()
+#@register_keras_serializable()
 class ComplexDense(layers.Layer):
     '''Defines a single layer of the widely linear transform with activation function'''
     def __init__(self, output_dim, activation = modrelu,  name="encoder", **kwargs): 
@@ -126,8 +131,23 @@ class ComplexDense(layers.Layer):
         z = self.wd_transform(inputs)
         return self.activation(z)
     
+    # save the model layers
+    # def get_config(self):
+    #     config = super().get_config()
+    #     config.update({
+    #          "output_dim": self.output_dim,
+    #          "activation": tf.keras.activations.serialize(self.activation)
+    #     })
+    #     return config
+    
+    # @classmethod
+    # def from_config(cls, config):
+    #     config["activation"] = tf.keras.activations.deserialize(config["activation"])
+    #     return cls(**config)
+       
+    
 
-@register_keras_serializable()
+#@register_keras_serializable()
 class ComplexEncoder(layers.Layer):
     ''' 
     Maps MNIST digits to compressed input in latent dimension  
@@ -156,8 +176,23 @@ class ComplexEncoder(layers.Layer):
         for layer in self.layers_list:
             x = layer(x) # this puts x through the layers to the latent dimension
         return x
+    
+    # def get_config(self):
+    #     config = super().get_config()
+    #     config.update({
+    #          "layer_dims": self.layer_dims,
+    #          "activation": tf.keras.activations.serialize(self.activation),
+    #          "layers_list": self.layers_list
+    #     })
+    #     return config
+    
+    # @classmethod
+    # def from_config(cls, config):
+    #     config["activation"] = tf.keras.activations.deserialize(config["activation"])
+    #     config["layers_list"] = tf.keras.
+    #     return cls(**config)
 
-@register_keras_serializable()
+#@register_keras_serializable()
 class ComplexDecoder(layers.Layer): 
     ''' 
     Maps input from latent dimension to reconstructed digit 

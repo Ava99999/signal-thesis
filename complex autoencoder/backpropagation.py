@@ -121,3 +121,81 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
     
 
     return grads
+
+
+# don't add @tf.function because it will be called in loops
+def CBP_decoder(z, decoder, jac_act): 
+    '''
+    Complex backpropagation algorithm for the widely linear transform of only the decoder layers. To be used to compute the Jacobian. 
+
+    Input:
+        z:          Tensor complex64, latent space representation, required to have dimension of latent_space
+        encoder:    Keras layer object (function), contains weights and forward pass operations
+        decoder:    Keras layer object (function), "
+        loss_fn:    todo
+        dev_loss:   Derivatives of the loss function, should return two arguments
+        jac_act:    Jacobian function of the activation function (C -> C)
+
+    Output:
+        jacobians:  the 2 Jacobians of the decoder with respect to the latent input
+    '''
+    ### FORWARD PASS ###
+    # NOTE: the order of this list is l = l_d, ..., L of the layers from encoder to decoder
+    # NOTE: q_list contains ql_d, ql_d+1, ..., qL, a_list contains al_d-1, ..., aL
+    a = z # first activation: al_[d]-1
+    q_list, a_list = [], []
+    a_list.append(z) 
+
+    # record activations decoder
+    D = len(decoder.layers_list)
+    for layer in decoder.layers_list:
+        q = layer.wd_transform(a)
+        a = layer.activation(q)
+        q_list.append(q)
+        a_list.append(a)
+
+    ### BACKWARD PASS ###
+    # NOTE: the order of this list is l = L, L-1, ..., l_D of the layers from decoder
+    da_dq_list, da_dqstar_list  = [], [] # record derivatives of the loss function up to pre-activation q^l, both R- and R*-derivative
+ 
+    # Wirtinger derivatives final layer
+    daL_dqL, daL_dqL_star = jac_act(q_list[-1]) # derivatives of activation function wrt final widely lin. transformation
+
+    da_dq_list.append(daL_dqL)
+    da_dqstar_list.append(daL_dqL_star)
+
+    print("daL_dqL",daL_dqL.shape)
+
+    # compute gradients final layer
+    #dR_dqL                = dR_daL @ daL_dqL        + dR_daL_star @ tf.math.conj(daL_dqL_star) # R-derivative
+    #dR_dqL_star           = dR_daL @ daL_dqL_star   + dR_daL_star @ tf.math.conj(daL_dqL) # R*-derivative
+
+    # recursive compute gradients layers L-1, ..., l_d+1
+    for l in reversed(range(1, D)):
+        layer_l                         = decoder.layers_list[l]
+        layer_lprev                     = decoder.layers_list[l-1] 
+        dql_dal_prev                    = tf.transpose(layer_l.W1) # dq[l]/da[l-1]
+        dql_dal_prev_star               = tf.transpose(layer_l.W2)
+        dal_dql_prev, dal_dql_prev_star = jac_act(q_list[l-1]) # da[l-1]/dq[l-1]
+
+        # compute da/dq[l-1] and da/dq[l-1]*
+        beta  = dql_dal_prev @ dal_dql_prev      + dql_dal_prev_star @ tf.math.conj(dal_dql_prev_star) # R-derivative
+        gamma = dql_dal_prev @ dal_dql_prev_star + dql_dal_prev_star @ tf.math.conj(dal_dql_prev) # R*-derivative
+
+        print("beta", beta.shape)
+        print("gamma", gamma.shape)
+
+        # TODO size check: it might not be the [-1], D-(l+1) is correct though
+        da_dql_prev      = (da_dq_list[D-(l+1)])[-1] @ beta  + (da_dqstar_list[D-(l+1)])[-1] @ tf.math.conj(gamma) # R-derivative
+        da_dql_prev_star = (da_dq_list[D-(l+1)])[-1] @ gamma + (da_dqstar_list[D-(l+1)])[-1] @ tf.math.conj(beta) # R*-derivative
+
+        print(da_dql_prev.shape)
+        print(da_dql_prev_star.shape)
+
+        da_dq_list.append(da_dql_prev)
+        da_dqstar_list.append(da_dql_prev_star)
+    
+    daL_dz      = (da_dq_list[-1])[-1] @ tf.transpose(layer_lprev.W1) + (da_dqstar_list[-1])[-1] @ tf.math.conj(tf.transpose(layer_lprev.W2))
+    daL_dzstar  = (da_dq_list[-1])[-1] @ tf.transpose(layer_lprev.W2) + (da_dqstar_list[-1])[-1] @ tf.math.conj(tf.transpose(layer_lprev.W1))
+
+    return daL_dz, daL_dzstar

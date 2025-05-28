@@ -64,7 +64,7 @@ def adaptive_stepsize(x, y, alpha, encoder, decoder, loss_fn, grads_and_vars, ma
 
     return alpha_final
 
-
+#@register_keras_serializable # probably not necessary?
 class Complex_SGD(Optimizer):
     '''Subclass op keras Optimizer, to be used in the keras model'''
     def __init__(self, name="ComplexSGD", **kwargs): # later plug std for stepsize_fn
@@ -77,3 +77,4 @@ class Complex_SGD(Optimizer):
             var.assign_sub(tf.cast(alpha, tf.complex64) * grad)
         
         return None
+    
