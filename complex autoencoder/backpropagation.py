@@ -123,7 +123,6 @@ def CBP(x, y, encoder, decoder, dev_loss, jac_act):
     return grads
 
 
-# don't add @tf.function because it will be called in loops
 def CBP_decoder(z, decoder, jac_act): 
     '''
     Complex backpropagation algorithm for the widely linear transform of only the decoder layers. To be used to compute the Jacobian. 
@@ -164,7 +163,7 @@ def CBP_decoder(z, decoder, jac_act):
     da_dq_list.append(daL_dqL)
     da_dqstar_list.append(daL_dqL_star)
 
-    print("daL_dqL",daL_dqL.shape)
+    #print("daL_dqL",daL_dqL.shape)
 
     # compute gradients final layer
     #dR_dqL                = dR_daL @ daL_dqL        + dR_daL_star @ tf.math.conj(daL_dqL_star) # R-derivative
@@ -182,15 +181,15 @@ def CBP_decoder(z, decoder, jac_act):
         beta  = dql_dal_prev @ dal_dql_prev      + dql_dal_prev_star @ tf.math.conj(dal_dql_prev_star) # R-derivative
         gamma = dql_dal_prev @ dal_dql_prev_star + dql_dal_prev_star @ tf.math.conj(dal_dql_prev) # R*-derivative
 
-        print("beta", beta.shape)
-        print("gamma", gamma.shape)
+        #print("beta", beta.shape)
+        #print("gamma", gamma.shape)
 
         # TODO size check: it might not be the [-1], D-(l+1) is correct though
         da_dql_prev      = (da_dq_list[D-(l+1)])[-1] @ beta  + (da_dqstar_list[D-(l+1)])[-1] @ tf.math.conj(gamma) # R-derivative
         da_dql_prev_star = (da_dq_list[D-(l+1)])[-1] @ gamma + (da_dqstar_list[D-(l+1)])[-1] @ tf.math.conj(beta) # R*-derivative
 
-        print(da_dql_prev.shape)
-        print(da_dql_prev_star.shape)
+        #print(da_dql_prev.shape)
+        #print(da_dql_prev_star.shape)
 
         da_dq_list.append(da_dql_prev)
         da_dqstar_list.append(da_dql_prev_star)
