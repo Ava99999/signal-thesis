@@ -33,7 +33,7 @@ def arctan_complex(z):
 
 # modReLU activation function
 #@register_keras_serializable
-def modrelu(z, b = -0.25):
+def modrelu(z, b = -0.1):
     """
     Implements modReLU(z) = ReLU(|z| + b) * z/(|z|)
     """
@@ -70,7 +70,7 @@ def dLossdaL(a, x):
     '''
     return tf.math.conj(a - x), a - x
 
-def Jac_modrelu(z, b = -0.25): # todo maybe research sparse implementation, these are possibly going to be large
+def Jac_modrelu(z, b = -0.1): 
     '''
     Jacobian of the modrelu function with radius b. 
     
@@ -220,3 +220,14 @@ class ComplexDecoder(layers.Layer):
         for layer in self.layers_list:
             x = layer(x) # this puts x through the layers to the latent dimension
         return x
+    
+class DecoderSave(tf.keras.Model):
+    '''
+    Simple wrap around the decoder which enables saving the weights of the function
+    '''
+    def __init__(self, decoder):
+        super().__init__()
+        self.decoder = decoder
+    
+    def call(self, z):
+        return self.decoder(z)

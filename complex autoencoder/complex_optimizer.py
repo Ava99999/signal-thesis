@@ -77,4 +77,3 @@ class Complex_SGD(Optimizer):
             var.assign_sub(tf.cast(alpha, tf.complex64) * grad)
         
         return None
-    
