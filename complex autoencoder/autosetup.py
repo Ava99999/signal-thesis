@@ -221,6 +221,19 @@ class ComplexDecoder(layers.Layer):
             x = layer(x) # this puts x through the layers to the latent dimension
         return x
     
+
+class EncoderSave(tf.keras.Model):
+    '''
+    Simple wrap around the encoder which enables saving the weights of the function
+    '''
+    def __init__(self, encoder):
+        super().__init__()
+        self.encoder = encoder
+    
+    def call(self, x):
+        return self.encoder(x)
+
+
 class DecoderSave(tf.keras.Model):
     '''
     Simple wrap around the decoder which enables saving the weights of the function
