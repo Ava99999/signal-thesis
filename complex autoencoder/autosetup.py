@@ -51,6 +51,10 @@ def loss_MSE(a,x):
     Compute MSE loss function with output final layer (a) and input (x). Both assumed Tensor Complex64 1D arrays.
     Formula: (a - x)^H (a - x) = sum_j (Re[a_j - x_j])^2 + (Im[a_j - x_j])^2
     '''
+    # if not tensor, make tensor
+    a = tf.convert_to_tensor(a, dtype=tf.complex64)
+    x = tf.convert_to_tensor(x, dtype=tf.complex64)
+
     subtract = a-x
     real_part = tf.square(tf.math.real(subtract))
     imag_part = tf.square(tf.math.imag(subtract))
