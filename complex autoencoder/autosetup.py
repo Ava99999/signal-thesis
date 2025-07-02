@@ -21,17 +21,25 @@ from scipy.optimize import minimize
 tf.keras.saving.get_custom_objects().clear() # remove previously registered objects
 
 # complex initianalizer
+#def glorot_complex(shape, dtype=tf.complex64):
+    #real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
+    #imag = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32) #tf.keras.initializers.RandomNormal(stddev=1e-4)(shape, dtype=tf.float32)
+    #return tf.complex(real, imag)
+
 def glorot_complex(shape, dtype=tf.complex64):
-    real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
-    imag = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32) #tf.keras.initializers.RandomNormal(stddev=1e-4)(shape, dtype=tf.float32)
+    scale = 1/np.sqrt(2)
+    glorot = tf.keras.initializers.GlorotUniform()
+    real = scale * glorot(shape, dtype=tf.float32)
+    imag = scale * glorot(shape, dtype=tf.float32)
     return tf.complex(real, imag)
 
-# custom activation function 
+# custom activation functions
+# complex arctan
 def arctan_complex(z):
     i = tf.constant(1j, dtype=tf.complex64)
     return 0.5*i*(tf.math.log(1 - i*z) - tf.math.log(1 + i*z))
 
-# modReLU activation function
+# modReLU
 #@register_keras_serializable
 def modrelu(z, b = -0.1):
     """
@@ -44,6 +52,16 @@ def modrelu(z, b = -0.1):
     return tf.cast(scale, z.dtype) * z
 
 # or....     return tf.maximum(tf.abs(z) + b, 0) * tf.math.exp(1j * tf.math.angle(z))???
+
+# capped arctan
+def cap_arctan(z):
+    '''
+    Implements arctan(|z|)*z/|z|
+    '''
+    abs_z = tf.math.abs(z)
+    arctan = tf.math.atan(abs_z)
+    scale = tf.where(abs_z > 0, arctan / abs_z, tf.zeros_like(abs_z)) 
+    return tf.cast(scale, z.dtype) * z
     
 #MSE loss function (single sample)
 def loss_MSE(a,x):
@@ -76,7 +94,7 @@ def dLossdaL(a, x):
 
 def Jac_modrelu(z, b = -0.1): 
     '''
-    Jacobian of the modrelu function with radius b. 
+    Jacobians of the modrelu function with radius b. 
     
     Input:
         z:      Tensor complex64 array
@@ -89,12 +107,23 @@ def Jac_modrelu(z, b = -0.1):
     J_zstar   = tf.linalg.diag(dev_zstar)
     return J_z, J_zstar
 
-'''Defining custom complex layer object with widely linear transform and custom encoder and decoder'''
+def Jac_caparctan(z): 
+    '''
+    Jacobians of the cap_arctan function.
+    '''
+    abs_z     = tf.cast(tf.math.abs(z), z.dtype) 
+    arctan    = tf.math.atan(abs_z)
+    dev_z     = tf.where(tf.math.abs(z) > 0, tf.cast(arctan/(2*abs_z)+ 1/(2*(1+abs_z**2)), z.dtype), tf.zeros_like(z))
+    dev_zstar = tf.where(tf.math.abs(z) > 0, tf.cast((-arctan*z**2)/(2*abs_z**3) + (z**2)/(2*(abs_z**2)*(1+abs_z**2)), z.dtype), tf.zeros_like(z))
+    J_z       = tf.linalg.diag(dev_z)
+    J_zstar   = tf.linalg.diag(dev_zstar)
+    return J_z, J_zstar
 
+'''Defining custom complex layer object with widely linear transform and custom encoder and decoder'''
 #@register_keras_serializable()
 class ComplexDense(layers.Layer):
     '''Defines a single layer of the widely linear transform with activation function'''
-    def __init__(self, output_dim, activation = modrelu,  name="encoder", **kwargs): 
+    def __init__(self, output_dim, activation = cap_arctan,  name="encoder", **kwargs): 
         super().__init__(name=name, **kwargs)
         self.output_dim = output_dim
         self.activation = activation
@@ -160,7 +189,7 @@ class ComplexEncoder(layers.Layer):
         input_shape:        automatically passed through build, size of original data in the form (batch_size, data_dim)
     
     '''
-    def __init__(self, layer_dims, activation=modrelu, name="encoder", **kwargs):
+    def __init__(self, layer_dims, activation=cap_arctan, name="encoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
@@ -204,7 +233,7 @@ class ComplexDecoder(layers.Layer):
         layer_dims:     int array, e.g. [64, 128, original_dim]. Does not include latent dimension (or input)
     
     '''
-    def __init__(self, layer_dims, activation=modrelu, name="decoder", **kwargs):
+    def __init__(self, layer_dims, activation=cap_arctan, name="decoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
