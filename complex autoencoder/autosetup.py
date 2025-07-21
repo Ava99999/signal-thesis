@@ -19,12 +19,11 @@ from scipy.optimize import minimize
 
 ''' Initializers, loss- and activation functions '''
 tf.keras.saving.get_custom_objects().clear() # remove previously registered objects
-
-# complex initianalizer
-#def glorot_complex(shape, dtype=tf.complex64):
-    #real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
-    #imag = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32) #tf.keras.initializers.RandomNormal(stddev=1e-4)(shape, dtype=tf.float32)
-    #return tf.complex(real, imag)
+#complex initializer
+# def glorot_complex(shape, dtype=tf.complex64):
+#     real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
+#     imag = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32) #tf.keras.initializers.RandomNormal(stddev=1e-4)(shape, dtype=tf.float32)
+#     return tf.complex(real, imag)
 
 def glorot_complex(shape, dtype=tf.complex64):
     scale = 1/np.sqrt(2)

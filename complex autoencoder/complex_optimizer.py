@@ -68,11 +68,11 @@ def adaptive_stepsize(x, y, alpha, encoder, decoder, loss_fn, grads_and_vars, ma
 class Complex_SGD(Optimizer):
     '''Subclass op keras Optimizer, to be used in the keras model'''
     def __init__(self, name="ComplexSGD", **kwargs): # later plug std for stepsize_fn
-        super().__init__(learning_rate = 1e-4, name=name, **kwargs)
+        super().__init__(learning_rate = 1e-2, name=name, **kwargs)
 
     def apply_gradients(self, grads_and_vars, alpha = None, **kwargs):
         if alpha is None:
-            alpha = 1e-4
+            alpha = 1e-2
         for grad, var in grads_and_vars:
             var.assign_sub(tf.cast(alpha, tf.complex64) * grad)
         
