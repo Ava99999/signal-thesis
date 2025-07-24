@@ -122,7 +122,7 @@ def Jac_caparctan(z):
 #@register_keras_serializable()
 class ComplexDense(layers.Layer):
     '''Defines a single layer of the widely linear transform with activation function'''
-    def __init__(self, output_dim, activation = cap_arctan,  name="encoder", **kwargs): 
+    def __init__(self, output_dim, activation = modrelu,  name="encoder", **kwargs): 
         super().__init__(name=name, **kwargs)
         self.output_dim = output_dim
         self.activation = activation
@@ -188,7 +188,7 @@ class ComplexEncoder(layers.Layer):
         input_shape:        automatically passed through build, size of original data in the form (batch_size, data_dim)
     
     '''
-    def __init__(self, layer_dims, activation=cap_arctan, name="encoder", **kwargs):
+    def __init__(self, layer_dims, activation=modrelu, name="encoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
@@ -232,7 +232,7 @@ class ComplexDecoder(layers.Layer):
         layer_dims:     int array, e.g. [64, 128, original_dim]. Does not include latent dimension (or input)
     
     '''
-    def __init__(self, layer_dims, activation=cap_arctan, name="decoder", **kwargs):
+    def __init__(self, layer_dims, activation=modrelu, name="decoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
