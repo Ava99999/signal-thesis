@@ -19,38 +19,40 @@ from scipy.optimize import minimize
 
 ''' Initializers, loss- and activation functions '''
 tf.keras.saving.get_custom_objects().clear() # remove previously registered objects
-#complex initializer
+
+# complex initializer (real and imaginary parts uncorrelated)
 # def glorot_complex(shape, dtype=tf.complex64):
 #     real = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32)
 #     imag = (1/np.sqrt(2))*tf.keras.initializers.GlorotUniform()(shape, dtype=tf.float32) #tf.keras.initializers.RandomNormal(stddev=1e-4)(shape, dtype=tf.float32)
 #     return tf.complex(real, imag)
 
+# complex initializer (real and imaginary parts correlated)
 def glorot_complex(shape, dtype=tf.complex64):
     scale = 1/np.sqrt(2)
     glorot = tf.keras.initializers.GlorotUniform()
-    real = scale * glorot(shape, dtype=tf.float32)
-    imag = scale * glorot(shape, dtype=tf.float32)
+    real = scale*glorot(shape, dtype=tf.float32)
+    imag = scale*glorot(shape, dtype=tf.float32)
     return tf.complex(real, imag)
 
 # custom activation functions
 # complex arctan
 def arctan_complex(z):
+    '''
+    Implements arctan(z) = i/2 * (log(1 - i*z) - log(1 + i*z))
+    '''
     i = tf.constant(1j, dtype=tf.complex64)
     return 0.5*i*(tf.math.log(1 - i*z) - tf.math.log(1 + i*z))
 
 # modReLU
-#@register_keras_serializable
 def modrelu(z, b = -0.1):
     """
     Implements modReLU(z) = ReLU(|z| + b) * z/(|z|)
     """
     abs_z = tf.math.abs(z)
     relu = tf.keras.activations.relu(abs_z + b)
-    denom = tf.where(abs_z > 0, abs_z, tf.ones_like(abs_z))  # avoid 0 division
+    denom = tf.where(abs_z > 0, abs_z, tf.ones_like(abs_z))  # avoid division by 0
     scale = tf.where(abs_z > 0, relu / denom, tf.zeros_like(abs_z))
     return tf.cast(scale, z.dtype) * z
-
-# or....     return tf.maximum(tf.abs(z) + b, 0) * tf.math.exp(1j * tf.math.angle(z))???
 
 # capped arctan
 def cap_arctan(z):
@@ -62,7 +64,7 @@ def cap_arctan(z):
     scale = tf.where(abs_z > 0, arctan / abs_z, tf.zeros_like(abs_z)) 
     return tf.cast(scale, z.dtype) * z
     
-#MSE loss function (single sample)
+#MSE loss function (of a single sample)
 def loss_MSE(a,x):
     '''
     Compute MSE loss function with output final layer (a) and input (x). Both assumed Tensor Complex64 1D arrays.
@@ -93,7 +95,7 @@ def dLossdaL(a, x):
 
 def Jac_modrelu(z, b = -0.1): 
     '''
-    Jacobians of the modrelu function with radius b. 
+    Wirtinger calculus Jacobians of the modrelu function with radius b. 
     
     Input:
         z:      Tensor complex64 array
@@ -108,7 +110,7 @@ def Jac_modrelu(z, b = -0.1):
 
 def Jac_caparctan(z): 
     '''
-    Jacobians of the cap_arctan function.
+    Wirtinger calculus Jacobians of the cap_arctan function.
     '''
     abs_z     = tf.cast(tf.math.abs(z), z.dtype) 
     arctan    = tf.math.atan(abs_z)
@@ -119,10 +121,9 @@ def Jac_caparctan(z):
     return J_z, J_zstar
 
 '''Defining custom complex layer object with widely linear transform and custom encoder and decoder'''
-#@register_keras_serializable()
 class ComplexDense(layers.Layer):
     '''Defines a single layer of the widely linear transform with activation function'''
-    def __init__(self, output_dim, activation = modrelu,  name="encoder", **kwargs): 
+    def __init__(self, output_dim, activation = cap_arctan,  name="encoder", **kwargs): 
         super().__init__(name=name, **kwargs)
         self.output_dim = output_dim
         self.activation = activation
@@ -145,7 +146,7 @@ class ComplexDense(layers.Layer):
         )
         self.bias = self.add_weight(
             shape=(self.output_dim,),
-            initializer="zeros", # maybe should check if that works as complex zeros?
+            initializer="zeros",
             trainable=True,
             name="bias",
             dtype=tf.complex64,
@@ -156,39 +157,20 @@ class ComplexDense(layers.Layer):
         # assumes inputs is tf.complex dtype
         inputs = tf.cast(inputs, tf.complex64)
         tf.debugging.assert_type(inputs, tf.complex64) # for debugging
-        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias #! left multiplication is std!
+        return tf.matmul(inputs, self.W1) + tf.matmul(tf.math.conj(inputs), self.W2) + self.bias # NOTE left multiplication is std
     
     # defines the computation
     def call(self, inputs): 
         z = self.wd_transform(inputs)
-        return self.activation(z)
-    
-    # save the model layers
-    # def get_config(self):
-    #     config = super().get_config()
-    #     config.update({
-    #          "output_dim": self.output_dim,
-    #          "activation": tf.keras.activations.serialize(self.activation)
-    #     })
-    #     return config
-    
-    # @classmethod
-    # def from_config(cls, config):
-    #     config["activation"] = tf.keras.activations.deserialize(config["activation"])
-    #     return cls(**config)
-       
-    
+        return self.activation(z)      
 
-#@register_keras_serializable()
 class ComplexEncoder(layers.Layer):
     ''' 
-    Maps MNIST digits to compressed input in latent dimension  
-    Input/some parameters:
-        layer_dims:        int array, e.g. [128, 64, latent_dim]. Does not include input dimension. 
-        input_shape:        automatically passed through build, size of original data in the form (batch_size, data_dim)
-    
+    Maps MNIST digits to compressed input in latent dimension.
+    NOTE layer_dims is an array of the form [128, 64, latent_dim], excluding the input dimension.
+    NOTE input_shape takes the size of the original data in the form (batch_size, data_dim)   
     '''
-    def __init__(self, layer_dims, activation=modrelu, name="encoder", **kwargs):
+    def __init__(self, layer_dims, activation=cap_arctan, name="encoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
@@ -201,38 +183,20 @@ class ComplexEncoder(layers.Layer):
             for i in range(len(self.layer_dims))
         ]
         for layer in self.layers_list:
-            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]])) # basically dims[i]: input shape
+            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]])) 
 
     def call(self, inputs): # inputs is the data so shape (batch_size, 784)
         x = tf.cast(inputs, tf.complex64)
         for layer in self.layers_list:
             x = layer(x) # this puts x through the layers to the latent dimension
         return x
-    
-    # def get_config(self):
-    #     config = super().get_config()
-    #     config.update({
-    #          "layer_dims": self.layer_dims,
-    #          "activation": tf.keras.activations.serialize(self.activation),
-    #          "layers_list": self.layers_list
-    #     })
-    #     return config
-    
-    # @classmethod
-    # def from_config(cls, config):
-    #     config["activation"] = tf.keras.activations.deserialize(config["activation"])
-    #     config["layers_list"] = tf.keras.
-    #     return cls(**config)
 
-#@register_keras_serializable()
 class ComplexDecoder(layers.Layer): 
     ''' 
-    Maps input from latent dimension to reconstructed digit 
-    Some parameters:
-        layer_dims:     int array, e.g. [64, 128, original_dim]. Does not include latent dimension (or input)
-    
+    Maps input from latent dimension to reconstructed digit.
+    NOTE layer_dims is an array of the form [64, 128, original_dim], excluding the latent dimension.    
     '''
-    def __init__(self, layer_dims, activation=modrelu, name="decoder", **kwargs):
+    def __init__(self, layer_dims, activation=cap_arctan, name="decoder", **kwargs):
         super().__init__(name=name, **kwargs)
         self.layer_dims = layer_dims 
         self.activation = activation
@@ -245,7 +209,7 @@ class ComplexDecoder(layers.Layer):
             for i in range(len(self.layer_dims))
         ]
         for layer in self.layers_list:
-            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]])) # basically dims[i]: input shape
+            layer.build(tf.TensorShape([None, dims[self.layers_list.index(layer)]]))
 
     def call(self, inputs): # inputs is the data so shape (batch_size, 784)
         x = tf.cast(inputs, tf.complex64)
@@ -256,7 +220,7 @@ class ComplexDecoder(layers.Layer):
 
 class EncoderSave(tf.keras.Model):
     '''
-    Simple wrap around the encoder which enables saving the weights of the function
+    Simple wrap around the encoder which enables saving the weights of the function.
     '''
     def __init__(self, encoder):
         super().__init__()
@@ -268,7 +232,7 @@ class EncoderSave(tf.keras.Model):
 
 class DecoderSave(tf.keras.Model):
     '''
-    Simple wrap around the decoder which enables saving the weights of the function
+    Simple wrap around the decoder which enables saving the weights of the function.
     '''
     def __init__(self, decoder):
         super().__init__()

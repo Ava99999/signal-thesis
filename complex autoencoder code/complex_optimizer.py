@@ -18,11 +18,25 @@ from scipy.fft import fft, ifft, fft2, ifft2
 from scipy.optimize import minimize
 
 '''Contains the SGD coptimizer and step-size computation'''
-# TODO this should not be called in complex sgd because it has too many variables, but in main, and result can be plugged in sgd. 
-# TODO consider adding a gradient blow-up control (cap)
-# TODO add failsafe for when alpha gets too small
+# NOTE does not contain a failsafe for gradient blow-up or vanishing of alpha
+
 def adaptive_stepsize(x, y, alpha, encoder, decoder, loss_fn, grads_and_vars, max_trials=5):
-    ''' Currently just use a scalar, has to return a complex64 tensor. Will just do backtracking because hard. ''' 
+    '''
+    Backtracking line search to find a step size satisfying loss_fn(y_new) <= loss_fn(y) - alpha*c1*|grad(loss_fn(y))|^2, where grad is wrt the weights.
+    
+    Input:
+        x:              Tensor complex64, specific training sample
+        y:              Tensor complex64, result of forward pass
+        alpha:          float, initial step size    
+        encoder:        Keras layer object (function), contains weights and forward pass operations
+        decoder:        Keras layer object (function), contains weights and forward pass operations
+        loss_fn:        loss function (C^M -> R) with M the signal dimension
+        grads_and_vars: list of gradients wrt weight matrices and bias vectors and respective variables
+        max_trials:     int, maximum attempts of the line search
+
+    Output:
+        alpha_final:    float, final step size
+    ''' 
 
     c1 = tf.constant(1e-4, dtype=tf.float32)
     rho = tf.constant(0.5, dtype=tf.float32)
@@ -54,7 +68,7 @@ def adaptive_stepsize(x, y, alpha, encoder, decoder, loss_fn, grads_and_vars, ma
         success = new_loss <= compare_loss
         return trial + 1, alpha, success
 
-    # Initialize loop vars
+    # initialize loop vars
     trial = tf.constant(0)
     success = tf.constant(False)
 
@@ -64,10 +78,9 @@ def adaptive_stepsize(x, y, alpha, encoder, decoder, loss_fn, grads_and_vars, ma
 
     return alpha_final
 
-#@register_keras_serializable # probably not necessary?
 class Complex_SGD(Optimizer):
     '''Subclass op keras Optimizer, to be used in the keras model'''
-    def __init__(self, name="ComplexSGD", **kwargs): # later plug std for stepsize_fn
+    def __init__(self, name="ComplexSGD", **kwargs): 
         super().__init__(learning_rate = 1e-2, name=name, **kwargs)
 
     def apply_gradients(self, grads_and_vars, alpha = None, **kwargs):
