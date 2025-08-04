@@ -5,4 +5,6 @@ The datasets used for training the model are the MNIST dataset of handwritten di
 The architecture of the code for phase retrieval, which encompasses the minimization using quasi Newton L-BFGS, was retrieved from Aslan et al., [2025](https://arxiv.org/pdf/2502.01338) and can be found in this [Github repository](https://github.com/TristanvanLeeuwen/PtyGenography). 
 The code has been written assisted by OpenAI's CoPilot (OpenAI, [2025](chatgpt.com)).
 
+The folder titled 'complex autoencoder code' contains the architecture of the complex autoencoder, the numerical experiments, and pretrained weights on the MNIST and Fashion MNIST dataset. The folder 'modified PtyGenography code' contains the phase retrieval algorithm implemented by Aslan et al. using a PCA model as generative prior, with the addition of the numerical experiments that were done for this thesis.
+
 The code uses TensorFlow with the Keras API, and is based on the TensorFlow tutorials (Chollet, [2015a](https://www.tensorflow.org/guide/keras/writing_a_training_loop_from_scratch), [2015b](https://www.tensorflow.org/tutorials/generative/autoencoder)).
