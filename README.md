@@ -1,4 +1,4 @@
-## Code for thesis: Using a complex autoencoder as generative prior in phase retrieval
+## Code for MSc thesis: Using a complex autoencoder as generative prior in phase retrieval
 
 In the folders, the code for my thesis submitted in partial fulfillment of my MSc degree at Utrecht University can be found. 
 The datasets used for training the model are the MNIST dataset of handwritten digits (Lecun, Cortes and Burges [2010](http://yann.lecun.com/exdb/mnist)) and Fashion MNIST (Xiao, Rasul and Vollgraf, [2017](https://arxiv.org/abs/1708.07747)).
